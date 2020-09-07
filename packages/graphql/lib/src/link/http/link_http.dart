@@ -408,6 +408,7 @@ Future<FetchResult> _readFromCache(
 Future<void> _writeToCache(
     FutureOr<Directory> dir, String queryId, FetchResult result) async {
   if (dir == null) return;
+  print('Attempting cache write, statuscode=${result?.statusCode}');
   if (result?.statusCode == 200) {
     final file = File(join((await dir).path, '$queryId.json'));
     print('Creating cache entry for $queryId...');
