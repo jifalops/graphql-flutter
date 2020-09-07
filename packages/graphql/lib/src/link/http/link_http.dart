@@ -30,7 +30,7 @@ class HttpLink extends Link {
     Map<String, String> headers,
     Map<String, dynamic> credentials,
     Map<String, dynamic> fetchOptions,
-    Directory cacheDir,
+    FutureOr<Directory> cacheDir,
   }) : super(
           // @todo possibly this is a bug in dart analyzer
           // ignore: undefined_named_parameter
@@ -392,9 +392,10 @@ Encoding _determineEncodingFromResponse(BaseResponse response,
 String _queryId(Map<String, dynamic> body) =>
     '${body['operationName']}-${GqlCodec.utf8.hash(json.encode(body), 8)}';
 
-Future<FetchResult> _readFromCache(Directory dir, String queryId) async {
+Future<FetchResult> _readFromCache(
+    FutureOr<Directory> dir, String queryId) async {
   if (dir == null) return null;
-  final file = File(join(dir.path, '$queryId.json'));
+  final file = File(join((await dir).path, '$queryId.json'));
   if (await file.exists()) {
     return _parseResponseBytes(await file.readAsBytes(), 200, utf8);
   }
@@ -402,10 +403,10 @@ Future<FetchResult> _readFromCache(Directory dir, String queryId) async {
 }
 
 Future<void> _writeToCache(
-    Directory dir, String queryId, FetchResult result) async {
+    FutureOr<Directory> dir, String queryId, FetchResult result) async {
   if (dir == null) return;
   if (result?.statusCode == 200) {
-    final file = File(join(dir.path, '$queryId.json'));
+    final file = File(join((await dir).path, '$queryId.json'));
     return file.writeAsBytes(
       GqlCodec.utf8.encode(json.encode({
         'data': result.data,
