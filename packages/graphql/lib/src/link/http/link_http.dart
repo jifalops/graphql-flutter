@@ -395,10 +395,13 @@ String _queryId(Map<String, dynamic> body) =>
 Future<FetchResult> _readFromCache(
     FutureOr<Directory> dir, String queryId) async {
   if (dir == null) return null;
+  print('Checking for cached query $queryId...');
   final file = File(join((await dir).path, '$queryId.json'));
   if (await file.exists()) {
+    print('$queryId is cached!');
     return _parseResponseBytes(await file.readAsBytes(), 200, utf8);
   }
+  print('$queryId is not cached.');
   return null;
 }
 
@@ -407,7 +410,8 @@ Future<void> _writeToCache(
   if (dir == null) return;
   if (result?.statusCode == 200) {
     final file = File(join((await dir).path, '$queryId.json'));
-    return file.writeAsBytes(
+    print('Creating cache entry for $queryId...');
+    await file.writeAsBytes(
       GqlCodec.utf8.encode(json.encode({
         'data': result.data,
         'errors': result.errors,
@@ -415,5 +419,6 @@ Future<void> _writeToCache(
       })),
       flush: true,
     );
+    print('Wrote cache entry to ${file.path}.');
   }
 }
