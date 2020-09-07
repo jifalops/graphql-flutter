@@ -117,8 +117,13 @@ class HttpLink extends Link {
                 // controller.addError(translated);
 
                 // Try to load from the HTTP cache.
-                final cached = await _readFromCache(
-                    cacheDir, _queryId(httpHeadersAndBody.body));
+                FetchResult cached;
+                try {
+                  cached = await _readFromCache(
+                      cacheDir, _queryId(httpHeadersAndBody.body));
+                } catch (e) {
+                  // Ignore for now.
+                }
                 if (cached != null) {
                   controller.add(cached);
                 } else {
@@ -414,15 +419,19 @@ Future<void> _writeToCache(
   // print('Attempting cache write, statuscode=${result?.statusCode}');
   if (result?.statusCode == 200) {
     final file = File(join((await dir).path, '$queryId.json'));
-    print('Creating cache entry for $queryId...');
-    await file.writeAsBytes(
-      GqlCodec.utf8.encode(json.encode({
-        'data': result.data,
-        'errors': result.errors,
-        'time': DateTime.now().toUtc().toIso8601String(),
-      })),
-      flush: true,
-    );
-    print('Wrote cache entry to ${file.path}.');
+    try {
+      print('Creating cache entry for $queryId...');
+      await file.writeAsBytes(
+        GqlCodec.utf8.encode(json.encode({
+          'data': result.data,
+          'errors': result.errors,
+          'time': DateTime.now().toUtc().toIso8601String(),
+        })),
+        flush: true,
+      );
+      print('Wrote cache entry to ${file.path}.');
+    } catch (e) {
+      print('Failed writing cache entry ${file.path}: $e');
+    }
   }
 }
