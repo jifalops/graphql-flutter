@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:graphql/src/exceptions/exceptions.dart' as ex;
+import 'package:graphql/src/link/http/link_http_codec.dart';
 import 'package:meta/meta.dart';
 import 'package:http/http.dart';
 import 'package:http_parser/http_parser.dart';
@@ -14,6 +16,7 @@ import 'package:graphql/src/link/operation.dart';
 import 'package:graphql/src/link/fetch_result.dart';
 import 'package:graphql/src/link/http/fallback_http_config.dart';
 import 'package:graphql/src/link/http/http_config.dart';
+import 'package:path/path.dart';
 import './link_http_helper_deprecated_stub.dart'
     if (dart.library.io) './link_http_helper_deprecated_io.dart';
 
@@ -27,6 +30,7 @@ class HttpLink extends Link {
     Map<String, String> headers,
     Map<String, dynamic> credentials,
     Map<String, dynamic> fetchOptions,
+    Directory cacheDir,
   }) : super(
           // @todo possibly this is a bug in dart analyzer
           // ignore: undefined_named_parameter
@@ -98,6 +102,10 @@ class HttpLink extends Link {
                     await _parseResponse(response);
 
                 controller.add(parsedResponse);
+
+                // Write to the HTTP cache.
+                _writeToCache(cacheDir, _queryId(httpHeadersAndBody.body),
+                    parsedResponse);
               } catch (failure) {
                 // we overwrite socket uri for now:
                 // https://github.com/dart-lang/sdk/issues/12693
@@ -106,6 +114,13 @@ class HttpLink extends Link {
                   translated.uri = parsedUri;
                 }
                 controller.addError(translated);
+
+                // Try to load from the HTTP cache.
+                final cached = await _readFromCache(
+                    cacheDir, _queryId(httpHeadersAndBody.body));
+                if (cached != null) {
+                  controller.add(cached);
+                }
               }
 
               await controller.close();
@@ -316,6 +331,12 @@ Future<FetchResult> _parseResponse(StreamedResponse response) async {
   final Encoding encoding = _determineEncodingFromResponse(response);
   // @todo limit bodyBytes
   final Uint8List responseByte = await response.stream.toBytes();
+
+  return _parseResponseBytes(responseByte, statusCode, encoding);
+}
+
+Future<FetchResult> _parseResponseBytes(
+    Uint8List responseByte, int statusCode, Encoding encoding) async {
   final String decodedBody = encoding.decode(responseByte);
 
   final Map<String, dynamic> jsonResponse =
@@ -366,4 +387,32 @@ Encoding _determineEncodingFromResponse(BaseResponse response,
   final Encoding encoding = Encoding.getByName(charset);
 
   return encoding == null ? fallback : encoding;
+}
+
+String _queryId(Map<String, dynamic> body) =>
+    '${body['operationName']}-${GqlCodec.utf8.hash(json.encode(body), 8)}';
+
+Future<FetchResult> _readFromCache(Directory dir, String queryId) async {
+  if (dir == null) return null;
+  final file = File(join(dir.path, '$queryId.json'));
+  if (await file.exists()) {
+    return _parseResponseBytes(await file.readAsBytes(), 200, utf8);
+  }
+  return null;
+}
+
+Future<void> _writeToCache(
+    Directory dir, String queryId, FetchResult result) async {
+  if (dir == null) return;
+  if (result?.statusCode == 200) {
+    final file = File(join(dir.path, '$queryId.json'));
+    return file.writeAsBytes(
+      GqlCodec.utf8.encode(json.encode({
+        'data': result.data,
+        'errors': result.errors,
+        'time': DateTime.now().toUtc().toIso8601String(),
+      })),
+      flush: true,
+    );
+  }
 }
