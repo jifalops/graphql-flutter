@@ -113,13 +113,16 @@ class HttpLink extends Link {
                 if (translated is ex.NetworkException) {
                   translated.uri = parsedUri;
                 }
-                controller.addError(translated);
+                // Moved this line because
+                // controller.addError(translated);
 
                 // Try to load from the HTTP cache.
                 final cached = await _readFromCache(
                     cacheDir, _queryId(httpHeadersAndBody.body));
                 if (cached != null) {
                   controller.add(cached);
+                } else {
+                  controller.addError(translated);
                 }
               }
 
